@@ -136,7 +136,7 @@ def download_project(url, local_path, download_proxy=None, timeout=120) -> bool:
     return True
 
 def copy_project(local_path):
-    UUID = uuid.uuid1()
+    UUID = uuid.uuid4()
     local_path = os.path.abspath(local_path)
     new_path = f"{local_path}-{UUID}"
     cmd = f"cp -r {local_path} {new_path}"
@@ -156,8 +156,8 @@ def main(
     
     Args:
         dataset_base_path (str): the base path to store the projects need to compile
-        clear_new_project (bool): whether to clear the new project path after the compilation, default is False, set to True when debugging
-        download_proxy (str): pass to git --config http.proxy=${}, e.g., socks5://127.0.0.1:9999, default is None: do not use proxy
+        clear_new_project (bool): whether to clear the new project path after the compilation, set to True when debugging
+        download_proxy (str): pass to git --config http.proxy=${}, e.g., socks5://127.0.0.1:9999, if do not set: do not use proxy
     '''
     DATASET_BASE_PATH = None
     if os.environ.get("DATASET_BASE_PATH"):
@@ -200,27 +200,28 @@ def main(
             ]
             # define agent
             agent = create_react_agent(llm=llm,tools=tools,prompt=prompt)
-            agent_executor = AgentExecutor(agent=agent,tools=tools,verbose=True,return_intermediate_steps=True,max_iterations=30,handle_parsing_errors=True)
+            agent_executor = AgentExecutor(agent=agent,tools=tools,verbose=True,return_intermediate_steps=True,max_iterations=2,handle_parsing_errors=True)
 
             res = None
             question = question_template.format(url=url)
-            for step in agent_executor.iter({"input":question},include_run_info=True):
-                if "intermediate_step" in step:
-                    pass
-                else:
-                    res = {
-                        "final_answer" : step["output"],
-                        "intermediate_steps" : step["intermediate_steps"],
-                        "output" : step["messages"][0].content,
-                        "run_id" : str(step["__run"].run_id)
-                    }
-                    if not res["output"]:
-                        res["output"] = res["final_answer"]
-                    # print(step)
-            # print("=========================================")
-            # print(res["intermediate_steps"])
-            # print(type(res["intermediate_steps"]))
-            ok = is_compiled(local_path, files)
+            try:
+                for step in agent_executor.iter({"input":question},include_run_info=True):
+                    if "intermediate_step" in step:
+                        pass
+                    else:
+                        res = {
+                            "final_answer" : step["output"],
+                            "intermediate_steps" : step["intermediate_steps"],
+                            "output" : step["messages"][0].content,
+                            "run_id" : str(step["__run"].run_id)
+                        }
+                        if not res["output"]:
+                            res["output"] = res["final_answer"]
+                        # print(step)
+                ok = is_compiled(local_path, files)
+            except Exception as e:
+                logging.error(f"[!] Compilation failed with error: {e}")
+                ok = False
             save_logs(question,tools,res,local_path,ok)
         
         if clear_new_project:
