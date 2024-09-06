@@ -256,7 +256,7 @@ class SearchCompilationInstruction:
                     chunk_size=3000, chunk_overlap=500, add_start_index=True
                 )
                 all_splits = text_splitter.split_documents(docs)
-                breakpoint()
+                # breakpoint()
                 self.vectorstore = Chroma.from_documents(
                     documents=all_splits,
                     embedding= OpenAIEmbeddings(
