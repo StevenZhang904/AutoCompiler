@@ -13,7 +13,7 @@ from langchain.agents import AgentExecutor,Tool
 from langchain_openai import ChatOpenAI
 from langchain import hub
 from langchain.prompts import PromptTemplate
-from tools import InteractiveDockerShell, SearchCompilationInstruction, SearchCompilationTarget, doc_sum, makefile_reader
+from tools import InteractiveDockerShell, SearchCompilationInstruction, SearchCompilationTarget, SearchInstruction, SearchTarget, doc_sum, makefile_reader
 from config import *
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
 logging.getLogger('httpx').setLevel(logging.ERROR)
@@ -39,11 +39,9 @@ The project has been downloaded into /work/, which is also the SHELL's initial p
 The following information must be followed:
 1. Use the SHELL tool to execute `pwd` command to make sure you are in the right path.
 2. Do not install the project and don't test the project, just compile it.
-3. Use the SEARCH_INSTRUCTION tool to looking for instructions about how to compile the project and then use the SHELL tool to compile it.
+3. Use the SEARCH_INSTRUCTION tool to looking for compilation instructions and then use the SHELL tool to compile it.
 4. If there are any difficulties during compilation, try to resolve them.
-5. Find the project's Makefile file and use the SEARCH_TARGET tool to find out all the compilation targets defined in the makefile after the compilation.
-6. Use `find` in SHELL to check out if the files exist.
-7. After checking, you need to output COMPILATION-SUCCESS, COMPILATION-FAIL, or COMPILATION-UNCERTAIN as the final answer.
+5. After checking, you need to check if the project actually compiled successfully and output COMPILATION-SUCCESS, COMPILATION-FAIL, or COMPILATION-UNCERTAIN as the final answer.
 """
 # You can read the README.md file in the project path to find compilation guide. 
 # If any problems occur during compilation, please use Google search tools to solve them first. 
@@ -202,9 +200,10 @@ def main(
         os.environ["LOCAL_PATH"] = local_path
         # breakpoint()
         with InteractiveDockerShell(local_path=local_path,timeout=120) as shell:
-            SearchIns = SearchCompilationInstruction(directory_path=local_path)
+            # SearchIns = SearchCompilationInstruction(directory_path=local_path)
             # SearchTar = SearchCompilationTarget(directory_path=local_path)
-            SearchTar = SearchTarget(directory_path=local_path)
+            SearchIns = SearchInstruction(directory_path=local_path)
+            SearchTar = SearchTarget()
             # define tools
             tools = [
                 Tool(

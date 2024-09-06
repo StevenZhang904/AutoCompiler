@@ -1,16 +1,29 @@
 import os
 import time
 import json
+import logging
 import httplib2
 import paramiko
 import subprocess
+import requests
+import chardet
+import httpx
+import openai
 from tqdm import tqdm
 from typing import List
 from langchain.tools import tool
 from googleapiclient.discovery import build
+from langchain_chroma import Chroma
 from langchain_community.utilities import GoogleSerperAPIWrapper
+from langchain_core.runnables import RunnableLambda
+from langchain.schema.runnable import RunnablePassthrough
+from langchain.prompts import PromptTemplate
+from langchain.schema import StrOutputParser
+from langchain.docstore.document import Document
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from bs4 import BeautifulSoup
 from ipdb import set_trace as bp
-
 
 @tool
 def google_search(query, topk=8, **kwargs):
@@ -40,7 +53,7 @@ def google_search(query, topk=8, **kwargs):
     return message
 
 @tool
-def doc_sum(file_path:str)->str:
+def doc_sum(file_path: str) -> str:
     '''
     A tool for summarizing the documentation of a project, and find out the compilation instruction.
     @param file_path: The absolute path of the documentation file, e.g. /work/README.md
@@ -53,7 +66,10 @@ def doc_sum(file_path:str)->str:
     file_path = file_path.replace("/work", local_path)
     if not os.path.exists(file_path):
         return "The documentation file does not exist."
-    print("[!] read doc file succ:", file_path)
+
+    # print("[!] read doc file succ:", file_path)
+    # agent query...
+    
     return """I've successfully used the code on 64bit x86, 32bit ARM and 8 bit AVR platforms.
 
 GCC size output when only CTR mode is compiled for ARM:
@@ -82,11 +98,12 @@ def makefile_reader(file_path:str)->str:
     This is a tool to find out all the compilation targets defined in the makefile, i.e. the binaries that should be compiled out.
     @param file_path: The absolute path of the makefile, e.g. /work/Makefile
     """
+    # 先分析执行make时编译的伪目标，提取伪目标里面的所有编译目标文件
     if ", " in file_path:
         return "the input doc_path should be a single file path"
     return json.dumps([
         "aes.o",
-    ])
+    ]) 
 
 class InteractiveDockerShell:
     HOSTNAME = 'c0mpi1er-c0nta1ner'
@@ -95,6 +112,7 @@ class InteractiveDockerShell:
             container_id = subprocess.run(f"docker run --hostname {self.HOSTNAME} -v {local_path}:/work/ -itd {image_name} /bin/bash", 
                                           shell=True, capture_output=True).stdout.decode().strip()
             assert len(container_id)==64, "Failed to create the container."
+            logging.info(f"[+] Container {container_id} created.")
             json_str = subprocess.run(f"docker inspect {container_id}", shell=True, capture_output=True).stdout.decode()
             ipaddr = json.loads(json_str)[0]['NetworkSettings']['IPAddress']
             retcode = subprocess.run(f"docker exec {container_id} /bin/bash -c 'service ssh start'", shell=True, capture_output=True).returncode
@@ -112,6 +130,7 @@ class InteractiveDockerShell:
         self.container_id = container_id
         self.last_line = "root@c0mpi1er-c0nta1ner:/work# "
         self.logger = []
+        self.execute_command("proxychains bash")
 
     def execute_command(self, command:str) -> str:
         """
@@ -159,7 +178,9 @@ class InteractiveDockerShell:
             # read outputs
             if self.session.recv_ready():
                 while self.session.recv_ready():
-                    output += self.session.recv(1024).decode('utf-8')
+                    recv = self.session.recv(1024)
+                    encode_result = chardet.detect(recv)
+                    output += recv.decode(encoding=(encode_result["encoding"] if encode_result["encoding"] != None else "utf-8"),errors="ignore")
                 time.sleep(0.5)  # add a delay after receiving output
             else:
                 time.sleep(0.5)
@@ -182,11 +203,11 @@ class InteractiveDockerShell:
             return "\n".join(output.split("\n")[-20:])
         else:
             if len(output)>3000:
-                output = output[:3000]
+                output = output[:1500]+"\n......\n"+output[-1500:]
             return output
 
     def close(self):
-        print("[!] stopping docker container, please wait a second...")
+        logging.info("[+] Stopping docker container, please wait a second...")
         if self.client:
             self.client.close()
         if self.container_id:
@@ -200,19 +221,311 @@ class InteractiveDockerShell:
         self.close()
 
 
+# RAG
+class SearchCompilationInstruction:
+    def __init__(self, directory_path: str, threshold=0.80):
+        self.vectorstore = None
+        self.similarity_threshold = threshold
+        self.directory_path = directory_path
+        # compilation instruction documents
+        self.compilation_ins_doc = ["README","INSTALL"] + [file for root, dirs, files in os.walk(directory_path) for file in files if file.endswith(".md") or file.endswith(".txt")]
+        # breakpoint()
+        
+    def read_files(self, to_read_docs: list) -> list:
+        documents = []
+        for root, dirs, files in os.walk(self.directory_path):
+            for file in files:
+                if file in to_read_docs:
+                    file_path = os.path.join(root,file)
+                    # breakpoint()
+                    try:
+                        with open(file_path,'r',errors="ignore") as fp:
+                            content=fp.read()
+                            documents.append(content)
+                    except Exception as e:
+                        print(f"Failed to read {file_path}: {e}")
+        return [Document(page_content="".join(documents), metadata={"source":self.directory_path})]
+
+    def setup_rag(self, files) -> bool:
+        docs = self.read_files(to_read_docs=files)
+        # split documents
+        if docs != []:
+            try:
+                # TODO
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=3000, chunk_overlap=500, add_start_index=True
+                )
+                all_splits = text_splitter.split_documents(docs)
+                breakpoint()
+                self.vectorstore = Chroma.from_documents(
+                    documents=all_splits,
+                    embedding= OpenAIEmbeddings(
+                        base_url="http://15.204.101.64:4000/v1",
+                        model="text-embedding-3-large",
+                        # api_key="sk-None-b4oAiUW1ZrrNSgDBwclvT3BlbkFJxNVWAD4Cr2kuiN5Sf0b8",
+                        api_key="sk-UGOp2ky29JpDCoft0267C7Ac37F34224B06cC1E507C80aA7",
+                        http_client=httpx.Client(proxies="socks5://127.0.0.1:29999"),
+                        timeout=60
+                    )
+                )
+                return True
+            except Exception as e:
+                return False
+        return False
+    
+    def get_relevant_docs(self, query: str):
+        docs_and_scores = self.vectorstore.similarity_search_with_score(query) # 用关键词查
+        relevant_docs = [
+            Document(page_content=doc.page_content,metadata=doc.metadata)
+            for doc, score in docs_and_scores
+            if score >= self.similarity_threshold
+        ]
+        return relevant_docs, len(relevant_docs)
+
+    def search_instruction(self, query: str) -> str:
+        """
+        Retrive the section about the query from the project documentation 
+        @param query: The query question.
+        """
+        rag = self.setup_rag(files=self.compilation_ins_doc)
+        # breakpoint()
+        if rag:
+            # retriver = self.vectorstore.as_retriever(search_type="similarity",search_kwargs={"k":6})
+            docs, found_relevant = self.get_relevant_docs(query)
+            # breakpoint()
+            if found_relevant:
+                llm = ChatOpenAI(
+                    base_url="http://15.204.101.64:4000/v1",
+                    model="gpt-3.5-turbo",
+                    # api_key="sk-None-b4oAiUW1ZrrNSgDBwclvT3BlbkFJxNVWAD4Cr2kuiN5Sf0b8",
+                    api_key="sk-UGOp2ky29JpDCoft0267C7Ac37F34224B06cC1E507C80aA7",
+                    http_client=httpx.Client(proxies="socks5://127.0.0.1:29999")
+                )
+                template = """You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+                Question: {question}
+                Context: {context} 
+                Answer:
+                """
+                context = "\n".join(doc.page_content for doc in docs)
+                prompt = PromptTemplate.from_template(template=template)
+                rag_chain=(
+                    {"context":RunnableLambda(lambda x :context), "question":RunnablePassthrough()}
+                    | prompt
+                    | llm
+                    | StrOutputParser()
+                )
+                answer = rag_chain.invoke(query)
+                return answer
+        return "Sorry, there is no compilation guidance in the project."
+    
+# Keyword
+class SearchInstruction:
+    def __init__(self, directory_path):
+        self.directory_path = directory_path
+        self.keywords = ["compile","build"]
+        self.selected_chunks = []
+        # compilation instruction documents
+        self.compilation_ins_doc = ["README","INSTALL"] + [file for root, dirs, files in os.walk(directory_path) for file in files if file.endswith(".md") or file.endswith(".txt")]
+
+    def read_files(self, to_read_docs: list) -> list:
+        documents = []
+        for root, dirs, files in os.walk(self.directory_path):
+            for file in files:
+                if file in to_read_docs:
+                    file_path = os.path.join(root,file)
+                    # breakpoint()
+                    try:
+                        with open(file_path,'r',errors="ignore") as fp:
+                            content=fp.read()
+                            documents.append(content)
+                    except Exception as e:
+                        print(f"Failed to read {file_path}: {e}")
+        return [Document(page_content="".join(documents), metadata={"source":self.directory_path})]
+
+    def select_chunks(self, files):
+        docs = self.read_files(to_read_docs=files)
+        # split documents
+        if docs != []:
+            try:
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=1000, chunk_overlap=50, add_start_index=True
+                )
+                all_splits = text_splitter.split_documents(docs)
+                # breakpoint()
+                for keyword in self.keywords:
+                    for chunk in all_splits:
+                        if keyword in chunk.page_content:
+                            self.selected_chunks.append(chunk)
+                # breakpoint()
+                if len(self.selected_chunks)!=0:
+                    return True
+            except Exception as e:
+                return False
+        return False
+
+    def search_instruction(self,*args,**kwargs) -> str:
+        found = self.select_chunks(self.compilation_ins_doc)
+        if found:
+            try:
+                llm = ChatOpenAI(
+                        base_url="http://15.204.101.64:4000/v1",
+                        model="gpt-3.5-turbo",
+                        # api_key="sk-None-b4oAiUW1ZrrNSgDBwclvT3BlbkFJxNVWAD4Cr2kuiN5Sf0b8",
+                        api_key="sk-UGOp2ky29JpDCoft0267C7Ac37F34224B06cC1E507C80aA7",
+                        http_client=httpx.Client(proxies="socks5://127.0.0.1:29999")
+                    )
+                template = """You are an assistant skilled in extracting compilation commands. Use the following pieces of text to identify the compilation command. If no compilation command is found, look for a URL related to compilation and output: <url>. If you can't find either, just say that you don't know. Response should be brief, clear, and professional.
+                Text: {text} 
+                Answer:
+                """
+                text = "\n".join(chunk.page_content for chunk in self.selected_chunks)
+                prompt = PromptTemplate.from_template(template=template)
+                rag_chain=(
+                    {"text":RunnableLambda(lambda x :text)}
+                    | prompt
+                    | llm
+                    | StrOutputParser()
+                )
+                answer = rag_chain.invoke({})
+                return answer
+            except openai.BadRequestError:
+                return "The length of the prompt has exceeded the maximum input length of the model and I can't find the compilation guidance in the project."
+        return "There is no compilation guidance in the project."
+
+
+    def __init__(self, directory_path: str):
+        self.directory_path = directory_path
+        self.compilation_tar_doc = ["Makefile"]
+
+    def display_info(self,tar=False):
+        if tar:
+            return self.compilation_tar_doc
+
+    def read_files(self, to_read_docs: list) -> list:
+        documents = []
+        for root, dirs, files in os.walk(self.directory_path):
+            for file in files:
+                if file in to_read_docs:
+                    file_path = os.path.join(root,file)
+                    # breakpoint()
+                    try:
+                        with open(file_path,'r',errors="ignore") as fp:
+                            content=fp.read()
+                            documents.append(content)
+                    except Exception as e:
+                        print(f"Failed to read {file_path}: {e}")
+        return documents
+    
+    def search_target(self,*args,**kwargs):
+        """
+        Read the Makefile file and return the final target file.
+        This function doesn't take any arguments.
+        """
+        docs = self.read_files(to_read_docs=self.compilation_tar_doc)
+        if len(docs) != 0: 
+            content = "\n".join(doc for doc in docs)
+            llm = ChatOpenAI(
+                base_url="https://api.fireworks.ai/inference/v1",
+                # api_key="GlxjqIOfuG5gzXebVZpG9gRjlCV4rs7ZxocvyoSUwebeh6AX",
+                api_key="0oEnOl0go9swJRhuhgefQr94J3Gtzbikmz8i9XqBrbDCO3z7",
+                model="accounts/fireworks/models/mixtral-8x7b-instruct",
+                temperature=0
+            )
+            prompt = PromptTemplate(
+                template="""
+                You are an expert in analyzing Makefiles and identifying compilation outputs. Your task is to analyze the provided Makefiles and extract only the final compiled targets.
+
+                Please follow these steps:
+
+                First analyze the pseudo target in the makefile file and extract all the compiled target files in the pseudo target.
+                List only these final output files.
+                Input:
+                {Makefile}
+
+                Output:
+
+                Final compiled target files:
+                """,
+                input_variables=["Makefile"]
+            )
+            chain = prompt | llm | StrOutputParser()
+            # breakpoint()
+            try:
+                answer = chain.invoke({"Makefile":content})
+                return answer
+            except Exception as e:
+                return "Sorry, there are not the final compilation files." #todo
+        return "Sorry, the project don't have the Makefile."
+
+class SearchTarget:
+    def __init__(self) -> None:
+        self.logger = []
+        
+    def search_target(self, file_path, *args, **kwargs):
+        """
+        Retrieve the final compiled target file from the param file_path after the compilation.
+        @param file_path: The absolute path of the project
+        """
+        local_path = os.environ["LOCAL_PATH"]
+        file_path=file_path.replace("/work",local_path)
+        if file_path.endswith("\n"):
+            file_path=file_path[:-1]
+        # breakpoint()
+        with open(file_path,"r") as fp:
+            docs=fp.read()
+        
+        # print(docs)
+        # print("="*100)
+
+        llm = ChatOpenAI(
+            base_url="https://api.fireworks.ai/inference/v1",
+            # api_key="GlxjqIOfuG5gzXebVZpG9gRjlCV4rs7ZxocvyoSUwebeh6AX",
+            api_key="0oEnOl0go9swJRhuhgefQr94J3Gtzbikmz8i9XqBrbDCO3z7",
+            model="accounts/fireworks/models/mixtral-8x7b-instruct",
+            temperature=0
+        )
+        prompt = PromptTemplate(
+            template="""
+            You are an expert in analyzing Makefiles and identifying compilation outputs. Your task is to analyze the provided Makefiles and extract only the final compiled targets.
+
+            Please follow these steps:
+
+            1. analyze the pseudo target in the makefile file.
+            2. extract all the compiled target files in the pseudo target.
+            3. List only these final output files.
+            Input:
+            {Makefile}
+
+            Output:
+
+            Final compiled target files:
+            """,
+            input_variables=["Makefile"]
+        )
+        chain = prompt | llm | StrOutputParser()
+        # breakpoint()
+        try:
+            answer = chain.invoke({"Makefile":docs})
+            return answer
+        except Exception as e:
+            return "Sorry, there are not the final compilation files." #todo
+
 if __name__ == '__main__':
     # DEMO
-    with InteractiveDockerShell(local_path="/data/huli/CompileAgent/dataset/tiny-AES-c") as shell:
-        print("="*60)
-        print(shell.execute_command('tree /work/ -L 2'))
-        print("="*60)
-        print(shell.execute_command('sleep 3 ; echo "hello"'))
-        print("="*60)
-        print(shell.execute_command('ls'))
-        print("="*60)
-        print(shell.execute_command('gcc -v'))
-        print("="*60)
-        print(shell.execute_command('uname -a'))
-        print("="*60)
+    search_ins = SearchInstruction(directory_path="/data/huli/CompileAgent/dataset/redis")
+    answer = search_ins.search_instruction(query="how to compile the project?")
+    print(answer)
+    # with InteractiveDockerShell(local_path="/data/huli/CompileAgent/dataset/tiny-AES-c") as shell:
+    #     print("="*60)
+    #     print(shell.execute_command('tree /work/ -L 2'))
+    #     print("="*60)
+    #     print(shell.execute_command('sleep 3 ; echo "hello"'))
+    #     print("="*60)
+    #     print(shell.execute_command('ls'))
+    #     print("="*60)
+    #     print(shell.execute_command('gcc -v'))
+    #     print("="*60)
+    #     print(shell.execute_command('uname -a'))
+    #     print("="*60)
 
 

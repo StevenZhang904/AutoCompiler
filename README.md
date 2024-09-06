@@ -15,8 +15,8 @@
 - [x] better logging
 - [x] command logging for replay
 - [x] add a uncertain option to model final output
-- [ ] use LLM to get the final binary name, and check it **@HuLi** tools.py@makefile_reader
-- [ ] use LLM to get compilation instruction from docs **@HuLi** tools.py@doc_sum
+- [x] use LLM to get the final binary name, and check it **@HuLi** tools.py@makefile_reader
+- [x] use LLM to get compilation instruction from docs **@HuLi** tools.py@doc_sum
 - [x] better command tool
 - [x] build a better docker image, add a dockerfile
 
