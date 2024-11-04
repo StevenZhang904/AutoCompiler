@@ -10,6 +10,7 @@ from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputP
 from typing import List, Dict, Any, Tuple
 from config import *
 import logging
+import time 
 import json
 import re
 import ast
@@ -25,9 +26,8 @@ file_handler.setFormatter(formatter)
 
 logger.addHandler(file_handler)
 
-
-llm1 = ANTHROPIC_MODEL
-llm2 = OPENAI_MODEL
+llm1 = OPENAI_MODEL
+llm2 = ANTHROPIC_MODEL
 llm3 = DEEPSEEK_MODEL
 
 os.environ["LANGCHAIN_TRACING_V2"] = LANGCHAIN_TRACING_V2
@@ -213,16 +213,7 @@ class Reconcile:
         """
         rounds = 2
         # Pharse1 : Initial Response Generation
-        claude = SingleAgent(
-            base_url=ANTHROPIC_BASE_URL,
-            model_name=ANTHROPIC_MODEL,
-            api_key=ANTHROPIC_API_KEY
-        )
-        claude_result = []
-        tmp = {}
-        tmp['prediction'] = claude.generate_answer(template=template1,question=mistake)
-        claude_result.append(tmp)
-
+        time.sleep(1)
         gpt = SingleAgent(
             base_url=OPENAI_BASE_URL,
             model_name=OPENAI_MODEL,
@@ -232,6 +223,16 @@ class Reconcile:
         tmp = {}
         tmp['prediction'] = gpt.generate_answer(template=template1,question=mistake)
         gpt_result.append(tmp)
+
+        claude = SingleAgent(
+            base_url=ANTHROPIC_BASE_URL,
+            model_name=ANTHROPIC_MODEL,
+            api_key=ANTHROPIC_API_KEY
+        )
+        claude_result = []
+        tmp = {}
+        tmp['prediction'] = claude.generate_answer(template=template1,question=mistake)
+        claude_result.append(tmp)
 
         deepseek = SingleAgent(
             base_url=DEEPSEEK_BASE_URL,
@@ -244,10 +245,10 @@ class Reconcile:
         deepseek_result.append(tmp)
 
         all_results = []
-        for c, g, d in zip(claude_result, gpt_result, deepseek_result):
+        for c, g, d in zip(gpt_result, claude_result, deepseek_result):
             all_results.append({
-                f'{claude.model_name}_output_0':c['prediction'],
                 f'{gpt.model_name}_output_0':g['prediction'],
+                f'{claude.model_name}_output_0':c['prediction'],
                 f'{deepseek.model_name}_output_0':d['prediction']
             })
         
@@ -260,6 +261,7 @@ class Reconcile:
             logging.info(f"[-] ------ Round {round} Discussion ------")
             for agent in [claude, gpt, deepseek]:
                 all_results = agent.debate(template=template2, question=mistake, results=all_results, rounds=round)
+                time.sleep(1)
             all_results = clean_output(all_results, round)
             all_results = parse_output(all_results, round, threshold=30)
             logging.info(f"[+] ------- Round {round} Discussion Done ------")

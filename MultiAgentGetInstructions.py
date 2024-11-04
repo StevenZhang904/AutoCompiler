@@ -19,13 +19,8 @@ os.environ["LANGCHAIN_API_KEY"] = LANGCHAIN_API_KEY
 os.environ["LANGCHAIN_PROJECT"] = LANGCHAIN_PROJECT_GETINSTRUCTIONS
 
 class ConversationAgent:
-    def __init__(self, content):
-        self.chat = ChatOpenAI(
-            base_url=OPENAI_BASE_URL,
-            model=OPENAI_MODEL,
-            api_key=OPENAI_API_KEY,
-            temperature=1
-        )
+    def __init__(self, content, llm):
+        self.chat = llm
         self.conversation_history: List = [
             SystemMessage(content=content)
         ]
@@ -143,11 +138,11 @@ class GetInstructions:
         self.logger = []
         self.project_name = project_name
 
-    def create_agent_executor(self, conversation_memory, proxy=PROXY):
+    def create_agent_executor(self, proxy=PROXY):
         llm = ChatOpenAI(
-            base_url=DEEPSEEK_BASE_URL,
-            api_key=DEEPSEEK_API_KEY,
-            model=DEEPSEEK_MODEL,
+            base_url=OPENAI_BASE_URL,
+            api_key=OPENAI_API_KEY,
+            model=OPENAI_MODEL,
             temperature=1
         )
         agenttools = AgentTools(proxy=proxy ,project_name=self.project_name)
@@ -168,61 +163,43 @@ class GetInstructions:
                 func=agenttools.get_content_from_url
             )
         ]
-        prompt=PromptTemplate.from_template(template="""You are an experienced software development engineer specialized in building projects from source code.
-    Previous Conversation Context:
-    {chat_history}
-
-    Available Tools:
-    {tools}
-
-    Current Task: {input}
-
-    To approach this step-by-step:
-    1. First, analyze the given files using GET_CONTENT_FROM_FILES
-    2. Look for any relevant URLs using GET_URL_FROM_FILES
-    3. If URLs are found, fetch their content using GET_CONTENT_FROM_URL
-    4. Compile all information into clear build instructions
-
-    Use this format:
-    Thought: Consider what you know and what to do next
-    Action: Tool to use, should be one of {tool_names}
-    Action Input: Specific input for the tool
-    Observation: Tool result
-    ... (repeat Thought/Action/Observation as needed)
-    Thought: I know what to recommend
-    Final Answer: Compilation Instructions in a clear, concise and accurate format.
-
-    Begin working:
-    Thought: {agent_scratchpad}"""
-    )
+        prompt=PromptTemplate.from_template(template=get_instructions_template)
 
         agent = create_react_agent(llm=llm,tools=tools,prompt=prompt)
         return AgentExecutor(
             agent=agent,
             tools=tools,
-            memory=conversation_memory,
             max_iterations=10,
             verbose=True
         )
 
-    def get_instructions(self, project_structure):
-        """
-        Select the files to read and get the compilation instructions from it according to the structure of the project.
-        @param project_structure: The project's structure.
-        """
+    def multi_llm_debate(self, project_structure):
         role1="BuildSystemExpert"
         experise1="build systems and compilation tools"
         focus_areas1=["Makefile", "CMake", "Gradle", "Maven"]
-
+        llm1 = ChatOpenAI(
+            base_url=OPENAI_BASE_URL,
+            model=OPENAI_MODEL,
+            api_key=OPENAI_API_KEY,
+            temperature=1
+        )
         agent1 = ConversationAgent(
-            content=f"""You are a {role1}, a specialist in {experise1}. Your focus areas are: {', '.join(focus_areas1)}"""
+            content=f"""You are a {role1}, a specialist in {experise1}. Your focus areas are: {', '.join(focus_areas1)}""",
+            llm=llm1
         )
 
         role2="ProjectStructureAnalyst"
         experise2="project organization and conventions"
         focus_areas2=["directory structures", "configuration files", "dependency management"]
+        llm2 = ChatOpenAI(
+            base_url=DEEPSEEK_BASE_URL,
+            model=DEEPSEEK_MODEL,
+            api_key=DEEPSEEK_API_KEY,
+            temperature=1
+        )
         agent2 = ConversationAgent(
-            content=f"""You are {role2}, a specialist in {experise2}. Your focus areas are: {', '.join(focus_areas2)}"""
+            content=f"""You are {role2}, a specialist in {experise2}. Your focus areas are: {', '.join(focus_areas2)}""",
+            llm=llm2
         )
 
         agent1.receive_message(f"""These are the project {self.project_name} structure: {project_structure}.
@@ -237,7 +214,7 @@ class GetInstructions:
                                 [Primary suggestions with confidence score]
                                 [Reasoning based on project structure]""", "System")
         message1 = agent1.send_message()
-
+        time.sleep(1)
         agent2.receive_message(message1, role1)
         agent2.receive_message(f"""These are the project {self.project_name} structure: {project_structure}.
                                 According to the structure of the project, combined with the analysis of {role1} and suggest the five possible locations for build/compilation instructions.
@@ -251,27 +228,33 @@ class GetInstructions:
                                 [Primary suggestions with confidence score]
                                 [Reasoning based on project structure]""", "System")
         message2 = agent2.send_message()
-
+        time.sleep(1)
         agent1.receive_message(message2, role2)
-        agent1.receive_message(f"""Combined with the analysis results of {role2}, modify your own results, and finally select the files where the three compilation instructions are most likely to exist. The results must be professional, concise, and accurate. Note: output the files' path.
+        agent1.receive_message(f"""Combined with the analysis results of {role2}, modify your own results, and finally select the files where the three compilation instructions are most likely to exist. 
+                                The results must be professional, concise, and accurate.
+                                Note: output the files' path and no additional unrelevant texts.
                                 Output Format:
                                 1. [Most possible location]
                                 2. [Second possible location]
                                 3. [Third possible location]""", "System")
         message3 = agent1.send_message()
 
-        memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
-        for message in agent1.conversation_history:
-            memory.chat_memory.add_message(message)
+        return message3
 
+    def get_instructions(self, project_structure):
+        """
+        Select the files to read and get the compilation instructions from them according to the structure of the project.
+        @param project_structure: The project's structure.
+        """
+        files = self.multi_llm_debate(project_structure=project_structure)
+        agent_executor = self.create_agent_executor()
         question = f"""Analyze the provided files and determine the compilation/building instructions for the {self.project_name} project.
-        Focus on Linux-based compilation methods and include any relevant URLs found.
-        Please provide clear, concise and accurate complation/building instructions.
+        Focus on Linux-based compilation instructions and include any relevant URLs found.
         Note: No additional Texts"""
-        agent_executor = self.create_agent_executor(conversation_memory=memory)
-        answer = agent_executor.invoke({"input":question})
+        answer = agent_executor.invoke({'input':question,'files':files})
         self.logger.append([
             project_structure,
             answer['output']
         ])
-        return answer['output']
+        return answer
+    
