@@ -1,16 +1,15 @@
 FROM gcc:13.2.0
 
 # install openssh-server
-RUN apt-get update && apt-get install -y openssh-server tree cmake vim
+RUN apt-get update && apt-get install -y openssh-server tree cmake vim proxychains4 git
 RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 ARG SSH_PASSWORD="root"
 RUN echo "root:$SSH_PASSWORD" | chpasswd
 RUN echo "cd /work" >> ~/.bashrc
 
-# install proxychains and set proxy
-RUN apt-get update && apt-get install -y proxychains
-RUN sed -i 's/^socks4\s\+127\.0\.0\.1\s\+[0-9]\+/socks5 192.168.0.1 29999/' /etc/proxychains.conf
+# configure proxychains
+RUN sed -i 's/^socks4\s\+127\.0\.0\.1\s\+[0-9]\+/socks5 192.168.0.1 29999/' /etc/proxychains4.conf
 
 # COPY wrapper into /
 COPY wrapper_compiler.sh /
