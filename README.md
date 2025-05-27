@@ -1,48 +1,30 @@
-# An LLM-Agent for project compilation automatically
+# CompileAgent: Automated Real-World Repo-Level Compilation with Tool-Integrated LLM-based Agent System
 
-
-## requirements
-
-`pip install langchain -i https://pypi.tuna.tsinghua.edu.cn/simple`
-`pip install typing-inspect==0.8.0 typing_extensions==4.5.0 -i https://pypi.tuna.tsinghua.edu.cn/simple`
+## Environment Setup
+```python
+conda create -n CompileAgent python=3.9.0
+conda activate CompileAgent
+pip install -r requirements.txt
+```
 
 ## Usage
+`python CompileAgent.py --help`
+```shell
+Usage: CompileAgent.py [OPTIONS]
 
-`python CompileAgent.py`
+Compile the projects from source code with the help of AI assistant
 
-## Roadmap
+Options:
+  -j, --json_path TEXT the path to the project file to be compiled [required]
+  -p, --dataset_base_path TEXT the base path to store the projects need to compile [required]
+  -l, --log_path TEXT the path to store the logs of compilation [required]
+  -c, --clean_copied_project BOOLEAN whether to clear the new project path after the compilation, set to True when debugging [required]
+  -r, --retry INTEGER the times to retry when fail to pass checker
+  -s, --strict_checker BOOLEAN if True, only return True when all target files are in the file list, otherwise return True when any target file is in the file list
+  --download_proxy TEXT pass to git --config http.proxy=${}, e.g., socks5://127.0.0.1:29999, if do not set: do not use proxy
+  --multi_process BOOLEAN whether to enable the multi-process to compile the projects
+  --help Show this message and exit.
+```
 
-- [x] better logging
-- [x] command logging for replay
-- [x] add a uncertain option to model final output
-- [x] use LLM to get the final binary name, and check it **@HuLi** tools.py@makefile_reader
-- [x] use LLM to get compilation instruction from docs **@HuLi** tools.py@doc_sum
-- [x] better command tool
-- [x] build a better docker image, add a dockerfile
+**NOTE:** Please configure the required LLMs api in `Config.py` before execting the `CompileAgent.py` file.
 
-- [x] download the project source code **@chenye**
-
-Future works
-- support specific compilation options
-    - [x] optimization level
-    - [x] debug info
-    - [ ] compiler
-    - [ ] target platform
-
-
-# Workflow
-
-1. download the project source code (python)
-2. find doc (agent)
-3. call doc_sum (agent)
-4. find compilation instruction, return concise doc (doc_sum)
-5. try compilation (agent)
-6. call makefile_reader (agent)
-7. find the target binary name (makefile_reader)
-8. checkout (agent)
-9. log agent-checkout-result, log checker-resulst (if have) (python)
-
-inst in project (ok)
-inst not in project
- - read readme.md 
- - get url
