@@ -6,10 +6,22 @@
   <a href=""><img src="https://img.shields.io/badge/😊-ACL'25-purple" height="20px"></a>
 </p> 
 
-
 ## 📙About
 
 CompileAgent is a tool designed to automatically compile projects directly from their source code repositories. In our [post](), we go beyond the scope of the paper by presenting extended experiments that highlight the application of CompileAgent across various downstream tasks.
+
+## ✒️Workflow
+
+<p align="center"><img src="./imgs/workflow.png" alt="workflow" style="width:100%;"></p>
+<!-- <p align="center">Figure 1: The workflow of CompileAgent.</p> -->
+
+- ***Step1:*** Specify the URL of the project to be compiled.
+- ***Step2:*** Extracting Compilation Instructions. Specifically, the MasterAgent calls the CompileNavigator module to obtain the project's compilation instructions. It first uses the Shell and File Navigator tools to locate relevant files, and then extracts the instructions using the Instruction Extractor tool.
+- ***Step3:*** Execute the Compilation Commands. If the compilation succeeds, proceed directly to Step5; if it fails, the ErrorSovler module will be invoked to perform error correction.
+- ***Step4:*** Resolving Compilation Errors. For simple compilation errors, the MasterAgent handles them directly. For more complex or challenging issues, the MasterAgent invokes Multi-Agent Discussion to find solutions. During the process, if new errors are encountered, Google Search may be used to retrieve potential solutions.
+- ***Step5:*** Display the result of the compilation: success or failure.
+
+More details can be found in our [paper](https://arxiv.org/pdf/2505.04254).
 
 
 ## 🚀Environment Setup
@@ -19,7 +31,15 @@ conda activate CompileAgent
 pip install -r requirements.txt
 ```
 
+Building the compilation environment:
+```
+docker build -t autocompiler:gcc13 .
+```
+**NOTE:** The Dockerfile can be modified to build a compilation environment tailored to your needs.
+
 ## 🔥Quick Start
+The Dataset directory includes three publicly compilable repositories that you can use for testing compilation.
+
 `python CompileAgent.py --help`
 ```shell
 Usage: CompileAgent.py [OPTIONS]
