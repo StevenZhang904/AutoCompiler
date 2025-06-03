@@ -12,11 +12,7 @@
 
 ## 📙About
 
-<<<<<<< HEAD
 CompileAgent is a LLM-driven framework designed to automatically compile projects directly from their source code repositories. In our [post](https://ch3nye.top/AutoCompiler), we go beyond the scope of the paper by presenting extended experiments that highlight the application of CompileAgent across various downstream tasks.
-=======
-CompileAgent is a tool designed to automatically compile projects directly from their source code repositories. In our [post](https://ch3nye.top/AutoCompiler), we go beyond the scope of the paper by presenting extended experiments that highlight the application of CompileAgent across various downstream tasks.
->>>>>>> f741d5e57ed8b68d174c298292d37d4949a89f04
 
 ## ✒️Workflow
 
