@@ -69,21 +69,41 @@ def assemble_all_to_json(template,tools,input,output,intermediate_steps):
 def save_logs(log_path,proj_name,question,tools,res,tools_logs,local_path,checker_ok,model_ok):
     # logging process
     now = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S:%f")
-    log_local_file = f"{log_path}/{proj_name}.log.{now}.txt"
+    project_log_path = os.path.join(log_path, proj_name)
+    if not os.path.exists(project_log_path):
+        os.makedirs(project_log_path)
+    log_local_file = os.path.join(project_log_path, f"{now}.txt")
     logging.info(f"[-] Saving logs to {log_local_file}")
+    
     with open(log_local_file,"w") as file:
         s = assemble_all_to_txt(template,tools,question,res["output"],res["intermediate_steps"])
         file.write(s)
+        
+    # Save a copy as latest log
+    latest_log_file = os.path.join(project_log_path, "latest.txt")
+    with open(latest_log_file,"w") as file:
+        s = assemble_all_to_txt(template,tools,question,res["output"],res["intermediate_steps"])
+        file.write(s)
+        
+            
     log_local_file_json = log_local_file.replace('.txt','.json')
     logging.info(f"[-] Saving logs to {log_local_file_json}")
     with open(log_local_file_json,"w") as file:
         s = assemble_all_to_json(template,tools,question,res["output"],res["intermediate_steps"])
         json.dump({"autocompiler":s, "tools":tools_logs},file,indent='\t')
 
+    # Save a copy as latest log in json format
+    latest_log_file_json = latest_log_file.replace('.txt','.json')
+    with open(latest_log_file_json,"w") as file:
+        s = assemble_all_to_json(template,tools,question,res["output"],res["intermediate_steps"])
+        json.dump({"autocompiler":s, "tools":tools_logs},file,indent='\t')
+        
+        
     # logging result
     run_id = res["run_id"]
     log_url = LOG_URL_TEMPLATE.format(run_id=run_id)
     process_id = os.getpid()
-    with open(PROCESS_LOG_CSV_PATH+f"/{process_id}.csv","a") as file:
+    process_log_csv_file_path = os.path.join(PROCESS_LOG_CSV_PATH, f"{process_id}-{now}.csv")
+    with open(process_log_csv_file_path,"a") as file:
         csv_writer = csv.writer(file)
         csv_writer.writerow([run_id, log_url, log_local_file, local_path, model_ok, checker_ok])
