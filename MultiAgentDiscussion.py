@@ -21,7 +21,7 @@ from Config import *
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-file_handler = logging.FileHandler('test/MultiAgentDiscussion.log',mode='a')
+file_handler = logging.FileHandler('logs/MultiAgentDiscussion.log',mode='a')
 file_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s %(name)s:%(levelname)s:%(message)s")
 file_handler.setFormatter(formatter)

@@ -1,17 +1,21 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 # langsmith config
-LANGCHAIN_TRACING_V2=""
-LANGCHAIN_PROJECT=""
-LANGCHAIN_API_KEY=""
+LANGCHAIN_TRACING_V2=os.environ.get("LANGCHAIN_TRACING_V2", "true")
+LANGCHAIN_PROJECT=os.environ.get("LANGCHAIN_PROJECT")
+LANGCHAIN_API_KEY= os.environ.get("LANGCHAIN_API_KEY")
 
 SERPER_API_KEY=""
 LOG_URL_TEMPLATE=""
 
 ## Multi-Agent Discussion
 # openai
-OPENAI_BASE_URL=""
-OPENAI_MODEL=""
-OPENAI_EMBEDDING_MODEL=""
-OPENAI_API_KEY="" 
+OPENAI_BASE_URL=os.environ.get("OPENAI_BASE_URL")
+OPENAI_MODEL=os.environ.get("OPENAI_MODEL")
+OPENAI_EMBEDDING_MODEL=os.environ.get("OPENAI_EMBEDDING_MODEL")
+OPENAI_API_KEY=os.environ.get("OPENAI_API_KEY")
 
 # claude
 ANTHROPIC_BASE_URL=""
@@ -27,7 +31,7 @@ PROXY=""
 PASSWORD=""
 
 # logs
-PROCESS_LOG_CSV_PATH=""
+PROCESS_LOG_CSV_PATH="/mnt/midnight/steven_zhang/AutoCompiler/logs/process_log_csv"
 FLOW_BASED_LOG_CSV_PATH=""
 
 # to compile projects

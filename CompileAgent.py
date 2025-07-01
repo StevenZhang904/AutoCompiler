@@ -20,7 +20,7 @@ from langchain.prompts import PromptTemplate
 import argparse
 import click
 
-from Tools import InteractiveDockerShell, SearchCompilationInstruction, ReadmeAI
+from Tools import InteractiveDockerShell, SearchCompilationInstruction
 from CustomAgentExecutor import CompilationAgentExecutor
 from MultiAgentGetInstructions import CompileNavigator
 from MultiAgentDiscussion import ErrorSolver
@@ -66,9 +66,9 @@ def start_compile(dataset_base_path,log_path,clean_copied_project,download_proxy
             os.environ["LOCAL_PATH"] = local_path
 
             llm = ChatOpenAI(
-                base_url=DEEPSEEK_BASE_URL,
-                model=DEEPSEEK_MODEL,
-                api_key=DEEPSEEK_API_KEY,
+                base_url=OPENAI_BASE_URL,
+                model=OPENAI_MODEL,
+                api_key=OPENAI_API_KEY,
                 temperature=1,
                 timeout=120
                 # http_client=httpx.Client(proxies=PROXY) if PROXY else None

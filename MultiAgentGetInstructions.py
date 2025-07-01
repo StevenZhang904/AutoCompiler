@@ -32,9 +32,9 @@ class AgentTools:
         """
         try:
             llm = ChatOpenAI(
-                base_url=DEEPSEEK_BASE_URL,
-                model=DEEPSEEK_MODEL,
-                api_key=DEEPSEEK_API_KEY,
+                base_url=OPENAI_BASE_URL,
+                model=OPENAI_MODEL,
+                api_key=OPENAI_API_KEY,
                 temperature=1
             )
 
@@ -97,9 +97,9 @@ Output: <files which have been revised>"""
             self.content = content
 
             llm = ChatOpenAI(
-                base_url=DEEPSEEK_BASE_URL,
-                api_key=DEEPSEEK_API_KEY,
-                model=DEEPSEEK_MODEL,
+                base_url=OPENAI_BASE_URL,
+                api_key=OPENAI_API_KEY,
+                model=OPENAI_MODEL,
                 temperature=1
             )
             template = """You are an experienced software development engineer and specialized in building a project from source code. The content of a file from a project repository will be provided, and you need to carefully analyze and output the useful information about "how to compile the project on linux from git cloned source code?". You need to following these rules:
@@ -138,9 +138,9 @@ Output: """
         if self.content:
             try:
                 llm = ChatOpenAI(
-                    base_url=DEEPSEEK_BASE_URL,
-                    api_key=DEEPSEEK_API_KEY,
-                    model=DEEPSEEK_MODEL,
+                    base_url=OPENAI_BASE_URL,
+                    api_key=OPENAI_API_KEY,
+                    model=OPENAI_MODEL,
                     temperature=1,
                 )
                 template = """You are an experienced software development engineer and specialized in identifying URLs related to compilation commands. Analyze the given text and extract any URLs specifically associated with obtaining or referencing compilation instructions. If no relevant URLs are found, simply state 'No relevant URLs found.' Ensure the result is accurate, concise, and professional.
@@ -200,9 +200,9 @@ class CompileNavigator:
         @param project_structure: The project structure.
         """
         llm = ChatOpenAI(
-            base_url=DEEPSEEK_BASE_URL,
-            model=DEEPSEEK_MODEL,
-            api_key=DEEPSEEK_API_KEY,
+            base_url=OPENAI_BASE_URL,
+            model=OPENAI_MODEL,
+            api_key=OPENAI_API_KEY,
             temperature=1
         )
         agenttools = AgentTools(local_path=self.local_path, project_name=self.project_name, project_structure=project_structure, proxy=PROXY)
