@@ -7,7 +7,7 @@ LANGCHAIN_TRACING_V2=os.environ.get("LANGCHAIN_TRACING_V2", "true")
 LANGCHAIN_PROJECT=os.environ.get("LANGCHAIN_PROJECT")
 LANGCHAIN_API_KEY= os.environ.get("LANGCHAIN_API_KEY")
 
-SERPER_API_KEY=""
+SERPER_API_KEY=os.environ.get("SERPER_API_KEY")
 LOG_URL_TEMPLATE=""
 
 ## Multi-Agent Discussion
@@ -18,17 +18,17 @@ OPENAI_EMBEDDING_MODEL=os.environ.get("OPENAI_EMBEDDING_MODEL")
 OPENAI_API_KEY=os.environ.get("OPENAI_API_KEY")
 
 # claude
-ANTHROPIC_BASE_URL=""
-ANTHROPIC_MODEL=""
-ANTHROPIC_API_KEY=""
+ANTHROPIC_BASE_URL=os.environ.get("ANTHROPIC_BASE_URL")
+ANTHROPIC_MODEL=os.environ.get("ANTHROPIC_MODEL")
+ANTHROPIC_API_KEY=os.environ.get("ANTHROPIC_API_KEY")
 
 # deepseek (MasterAgent and MultiAgentDiscussion)
-DEEPSEEK_BASE_URL=""
-DEEPSEEK_MODEL=""
-DEEPSEEK_API_KEY=""
+DEEPSEEK_BASE_URL=os.environ.get("DEEPSEEK_BASE_URL")
+DEEPSEEK_MODEL=os.environ.get("DEEPSEEK_MODEL")
+DEEPSEEK_API_KEY=os.environ.get("DEEPSEEK_API_KEY")
 
 PROXY=""
-PASSWORD=""
+PASSWORD=os.environ.get("PASSWORD")
 
 # logs
 PROCESS_LOG_CSV_PATH="/mnt/midnight/steven_zhang/AutoCompiler/logs/process_log_csv"
