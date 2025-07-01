@@ -50,6 +50,13 @@ def start_compile(dataset_base_path,log_path,clean_copied_project,download_proxy
     if not os.path.exists(DATASET_BASE_PATH):
         os.makedirs(DATASET_BASE_PATH)
 
+    COMPILED_REPOS_PATH = os.path.join(os.path.dirname(os.path.abspath(DATASET_BASE_PATH)), 'compiled_repos')
+    if not os.path.exists(COMPILED_REPOS_PATH):
+        os.makedirs(COMPILED_REPOS_PATH)
+
+    print(f"[+] Dataset base path: {DATASET_BASE_PATH}")
+    print(f"[+] Compiled repos path: {COMPILED_REPOS_PATH}")
+    
     if download_proxy != None:
         download_proxy=PROXY
 
@@ -58,12 +65,13 @@ def start_compile(dataset_base_path,log_path,clean_copied_project,download_proxy
         for _ in range(retry+1):
             url = info["url"]
             files = info.get("files",None)
-            proj_path = info.get("local_path",os.path.join(DATASET_BASE_PATH,proj_name))
-            if not os.path.exists(proj_path) or not os.listdir(proj_path): # if the project path is not exist or is empty
-                download_project(url,proj_path,download_proxy)
+            cloned_repo_path = info.get("local_path",os.path.join(DATASET_BASE_PATH,proj_name))
+            compiled_repo_path = os.path.join(COMPILED_REPOS_PATH,proj_name)
+            if not os.path.exists(cloned_repo_path) or not os.listdir(cloned_repo_path): # if the project path is not exist or is empty
+                download_project(url,cloned_repo_path,download_proxy)
             # copy new project path for compilation
-            local_path = copy_project(proj_path)
-            os.environ["LOCAL_PATH"] = local_path
+            compiled_repo_path = copy_project(cloned_repos_path=cloned_repo_path, compiled_repos_path=compiled_repo_path)
+            os.environ["LOCAL_PATH"] = compiled_repo_path
 
             llm = ChatOpenAI(
                 base_url=OPENAI_BASE_URL,
@@ -73,9 +81,9 @@ def start_compile(dataset_base_path,log_path,clean_copied_project,download_proxy
                 timeout=120
                 # http_client=httpx.Client(proxies=PROXY) if PROXY else None
             )
-            with InteractiveDockerShell(local_path=local_path,cmd_timeout=1200,use_proxy=True) as shell:
+            with InteractiveDockerShell(local_path=compiled_repo_path,cmd_timeout=1200,use_proxy=True) as shell:
                 # define tools
-                GetIns = CompileNavigator(local_path=local_path, project_name=proj_name)
+                GetIns = CompileNavigator(local_path=compiled_repo_path, project_name=proj_name)
                 Dis = ErrorSolver(project_name=proj_name)
                 tools = [
                     Tool(
@@ -113,7 +121,7 @@ def start_compile(dataset_base_path,log_path,clean_copied_project,download_proxy
                             }
                             if not res["output"]:
                                 res["output"] = res["final_answer"]
-                    checker_ok = is_compiled(local_path, files, strict=strict_checker)
+                    checker_ok = is_compiled(compiled_repo_path, files, strict=strict_checker)
                     checker_ok = f"{str(checker_ok)}(strict={str(strict_checker)})"
                 except Exception as e:
                     print(res)
@@ -127,14 +135,14 @@ def start_compile(dataset_base_path,log_path,clean_copied_project,download_proxy
                 else:
                     model_ok = "False"
 
-                logging.info("[-] Project {}, model result: {}, checker result: {}, path: {}".format(proj_name,model_ok,checker_ok,local_path))
+                logging.info("[-] Project {}, model result: {}, checker result: {}, path: {}".format(proj_name,model_ok,checker_ok,compiled_repo_path))
 
-                # if clean_copied_project:
-                #     logging.info(f"[+] Clear project compilation path {local_path}")
-                    # shutil.rmtree(local_path)
-                    # cmd = f"echo {PASSWORD} | sudo -S rm -rf {local_path}"
-                    # cmd = f'rm -rf {local_path}'
-                    # subprocess.run(cmd,shell=True)
+                if clean_copied_project:
+                    # shutil.rmtree(compiled_repo_path)
+                    cmd = f"echo {PASSWORD} | sudo -S rm -rf {compiled_repo_path}"
+                    # cmd = f'rm -rf {compiled_repo_path}'
+                    subprocess.run(cmd,shell=True)
+                    logging.info(f"[+] Cleared project compilation path {compiled_repo_path}")
 
                 tools_log = {
                     "Shell":shell.logger,
@@ -142,7 +150,7 @@ def start_compile(dataset_base_path,log_path,clean_copied_project,download_proxy
                     "ErrorSolver":Dis.logger
                 }
 
-                save_logs(log_path,proj_name,question,tools,res,tools_log,local_path,checker_ok,model_ok)
+                save_logs(log_path,proj_name,question,tools,res,tools_log,compiled_repo_path,checker_ok,model_ok)
 
             if checker_ok.startswith("False"):
                 continue
