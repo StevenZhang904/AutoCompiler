@@ -1,3 +1,4 @@
 logs/*
 compiled_repos/*
 __pycache__
+.env
