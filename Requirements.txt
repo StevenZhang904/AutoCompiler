@@ -8,9 +8,8 @@ APScheduler==3.11.0
 asgiref==3.8.1
 asttokens==2.4.1
 async-timeout==4.0.3
-asyncio==3.4.3
+# asyncio==3.4.3
 attrs==24.2.0
-autogen==0.3.0
 backoff==2.2.1
 bcrypt==4.2.0
 beautifulsoup4==4.12.3
@@ -149,7 +148,6 @@ python-dotenv==1.0.1
 python-multipart==0.0.20
 pytz==2024.2
 PyYAML==6.0.2
-readmeai==0.5.96
 regex==2024.7.24
 requests==2.32.3
 requests-oauthlib==2.0.0
